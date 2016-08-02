@@ -38,7 +38,6 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, sc.HelloMessage)
 	})
-	mux.HandleFunc("/{n}", calc)
 	mux.HandleFunc("/status", func(w http.ResponseWriter, req *http.Request) {
 		err := store.Ping()
 		if err == nil {
@@ -47,6 +46,7 @@ func main() {
 			r.JSON(w, http.StatusInternalServerError, map[string]string{"status": "DOWN", "err": err.Error()})
 		}
 	})
+	mux.HandleFunc("/{n}", calc)
 
 	n := negroni.Classic() // Includes some default middlewares
 	n.UseHandler(mux)
