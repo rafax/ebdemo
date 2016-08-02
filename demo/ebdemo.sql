@@ -11,6 +11,11 @@ CREATE SCHEMA "ebdemo";
 GRANT ALL PRIVILEGES ON DATABASE "ebdemo"
 TO "ebdemo";
 
+CREATE TABLE "ebdemo"."fact" (
+    n INT PRIMARY KEY,
+    factorial TEXT,
+    hits INT );
+
 GRANT ALL PRIVILEGES ON SCHEMA "ebdemo" TO "ebdemo";
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA "ebdemo" TO "ebdemo";
 ALTER DEFAULT PRIVILEGES IN SCHEMA "ebdemo" GRANT ALL PRIVILEGES ON TABLES  TO "ebdemo";

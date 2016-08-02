@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -13,7 +14,8 @@ import (
 )
 
 var (
-	r *render.Render
+	r     *render.Render
+	store Store
 )
 
 func main() {
@@ -22,14 +24,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	log.Println(dbc)
+	var sc ServerConfig
+	err = envconfig.Process("ebdemo", &sc)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+	log.Println(sc)
 
-	store := NewStore(dbc)
+	store = NewStore(dbc)
 	r = render.New()
 	mux := mux.NewRouter().StrictSlash(false)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(w, "Welcome to the home page!")
+		fmt.Fprintf(w, sc.HelloMessage)
 	})
 	mux.HandleFunc("/{n}", calc)
 	mux.HandleFunc("/status", func(w http.ResponseWriter, req *http.Request) {
@@ -44,23 +51,35 @@ func main() {
 	n := negroni.Classic() // Includes some default middlewares
 	n.UseHandler(mux)
 
-	http.ListenAndServe(":3000", n)
+	http.ListenAndServe("0.0.0.0:"+sc.Port, n)
 }
 
 func calc(w http.ResponseWriter, req *http.Request) {
 	n := mux.Vars(req)["n"]
+	log.Println("BICZ " + req.URL.Query().Get("nocache"))
+	nocache := req.URL.Query().Get("nocache") == "true"
 	in, err := strconv.Atoi(n)
 	if err != nil {
 		r.JSON(w, http.StatusBadRequest, map[string]string{"error": "Cannot parse to int: " + n, "err": err.Error()})
 	}
-	res := factorial(int64(in))
-	r.JSON(w, http.StatusOK, map[string]int64{"n": int64(in), "factorial": res, "hits": 0})
+	h := store.Get(in)
+	if !nocache && h != nil {
+		store.Hit(in, h.factorial)
+		r.JSON(w, http.StatusOK, map[string]string{"n": n, "factorial": h.factorial, "hits": strconv.FormatInt(h.hits, 10)})
+	} else {
+		log.Println(fmt.Sprintf("Not found %s, calculating", n))
+		res := factorial(in)
+		store.Hit(in, res.String())
+		r.JSON(w, http.StatusOK, map[string]string{"n": n, "factorial": res.String(), "hits": "0", "calculated": "true"})
+	}
+
 }
 
-func factorial(n int64) int64 {
-	res := int64(1)
-	for i := int64(2); i <= int64(n); i++ {
-		res *= i
-	}
-	return res
+func factorial(n int) *big.Int {
+	return big.NewInt(1).MulRange(1, int64(n))
+}
+
+type ServerConfig struct {
+	Port         string `default:"3000"`
+	HelloMessage string `default:"Hi there"`
 }

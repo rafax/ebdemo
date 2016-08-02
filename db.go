@@ -10,13 +10,13 @@ import (
 )
 
 type Store interface {
-	Hit(n int, fact int64)
-	Get(n int) Hits
+	Hit(n int, fact string)
+	Get(n int) *Hits
 	Ping() error
 }
 
 type Hits struct {
-	factorial int64
+	factorial string
 	hits      int64
 }
 
@@ -24,21 +24,18 @@ type pgStore struct {
 	db *sql.DB
 }
 
-func (pg pgStore) Hit(n int, factorial int64) {
-	pg.db.Exec("INSERT INTO fact (n,factorial,hits) VALUES ($1,$2,0) ON CONFLICT UPDATE SET hits = HITS +1", n, factorial)
+func (pg pgStore) Hit(n int, factorial string) {
+	pg.db.Exec("INSERT INTO ebdemo.fact as f (n,factorial,hits) VALUES ($1,$2,0) ON CONFLICT (n) DO UPDATE SET hits = f.hits +1 WHERE f.n = $1;", n, factorial)
 }
 
-func (pg pgStore) Get(n int) Hits {
+func (pg pgStore) Get(n int) *Hits {
 	var h Hits
-	rows, err := pg.db.Query("SELECT factorial, hits FROM fact WHERE n = $1", n)
+	err := pg.db.QueryRow("SELECT factorial, hits FROM ebdemo.fact WHERE n = $1", n).Scan(&h.factorial, &h.hits)
 	if err != nil {
-		log.Println("Error when getting for n" + err.Error())
+		log.Printf("Error when getting for %d: %s", n, err.Error())
+		return nil
 	}
-	rows.Scan(&h)
-	if err != nil {
-		log.Println("Error when parsing result" + err.Error())
-	}
-	return h
+	return &h
 }
 
 func (pg pgStore) Ping() error {
