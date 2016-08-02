@@ -1,16 +1,29 @@
 Elastic Beanstalk Intro
 What we plan to deploy:
-    - simple (Scala+Spring-boot if possible) app that binds to a port, exposes an API endpoint accepting parameters, takes config from environment
+    - simple app that:
+        - binds to a port
+        - exposes an API endpoint for calculating factorials
+        - stores calculations and hit count in Postgres DB
+        - takes config from environment
     - HA RDS instance to show DB failover
 How will we deploy:
-    EB + Docker + fat-jar
+    EB + Docker inside a private VPC
 Features to show:
     - config from environment
     - ELB load balancing instances
     - healthchecks
     - ELB healing instances
-    - DB failover resulting in instances switching to new server
     - "runtime" configuration
+    - securing the environment
+Optional (if we have time):
+    - CNAME
+    - SSL certificates
+    - autoscaling
+    - migrations
+    - monitoring
+    - DB failover resulting in instances switching to new server
+
+
 
 
 
