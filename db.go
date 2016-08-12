@@ -2,16 +2,17 @@ package main
 
 import (
 	"database/sql"
-	"log"
 
 	_ "github.com/lib/pq"
+
+	cmap "github.com/streamrail/concurrent-map"
 
 	"fmt"
 )
 
 type Store interface {
-	Hit(n int, fact string)
-	Get(n int) *Hits
+	Store(uid string, update PlayheadUpdate)
+	Get(uid, mgid string) *PlayheadUpdate
 	Ping() error
 }
 
@@ -24,22 +25,54 @@ type pgStore struct {
 	db *sql.DB
 }
 
-func (pg pgStore) Hit(n int, factorial string) {
-	pg.db.Exec("INSERT INTO ebdemo.fact as f (n,factorial,hits) VALUES ($1,$2,0) ON CONFLICT (n) DO UPDATE SET hits = f.hits +1 WHERE f.n = $1;", n, factorial)
+type memStore struct {
+	phs cmap.ConcurrentMap
 }
 
-func (pg pgStore) Get(n int) *Hits {
-	var h Hits
-	err := pg.db.QueryRow("SELECT factorial, hits FROM ebdemo.fact WHERE n = $1", n).Scan(&h.factorial, &h.hits)
+func (pg pgStore) Store(uid string, update PlayheadUpdate) {
+	res, err := pg.db.Exec("INSERT INTO ebdemo.playhead as p (uid,mgid,playhead) VALUES ($1,$2,$3) ON CONFLICT (uid,mgid) DO UPDATE SET playhead = $3 WHERE p.uid = $1 AND p.mgid = $2", uid, update.Mgid, update.Playhead)
 	if err != nil {
-		log.Printf("Error when getting for %d: %s", n, err.Error())
-		return nil
+		fmt.Printf("Could not store %v", err)
+	} else {
+		fmt.Printf("Stored, got %v", res)
 	}
-	return &h
+}
+
+func (pg pgStore) Get(uid, mgid string) *PlayheadUpdate {
+	var h PlayheadUpdate
+	h.Mgid = mgid
+	err := pg.db.QueryRow("SELECT p.playhead FROM ebdemo.playhead as p WHERE p.uid = $1 AND p.mgid = $2", uid, mgid).Scan(&h.Playhead)
+	if err != nil {
+		fmt.Printf("Error %v", err)
+		return nil
+	} else {
+		return &h
+	}
 }
 
 func (pg pgStore) Ping() error {
 	return pg.db.Ping()
+}
+
+func key(uid, mgid string) string {
+	return uid + ":" + mgid
+}
+
+func (m memStore) Store(uid string, update PlayheadUpdate) {
+	m.phs.Set(key(uid, update.Mgid), update.Playhead)
+}
+
+func (m memStore) Get(uid, mgid string) *PlayheadUpdate {
+	playhead, ok := m.phs.Get(key(uid, mgid))
+	if ok {
+		return &PlayheadUpdate{Mgid: mgid, Playhead: playhead.(string)}
+	} else {
+		return nil
+	}
+}
+
+func (m memStore) Ping() error {
+	return nil
 }
 
 type DbConfig struct {
@@ -49,7 +82,12 @@ type DbConfig struct {
 	Db       string `required:"true"`
 }
 
-func NewStore(dbc DbConfig) Store {
+func NewPgStore(dbc DbConfig) Store {
 	db, _ := sql.Open("postgres", fmt.Sprintf("user=%s password=%s dbname=%s host=%s sslmode=disable", dbc.User, dbc.Password, dbc.Db, dbc.Url))
+	db.SetMaxOpenConns(100)
 	return pgStore{db: db}
+}
+
+func NewMemStore() memStore {
+	return memStore{phs: cmap.New()}
 }

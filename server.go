@@ -1,12 +1,11 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/kelseyhightower/envconfig"
@@ -26,9 +25,8 @@ func main() {
 
 	mux := mux.NewRouter()
 
-	mux.HandleFunc("/", hello)
+	mux.HandleFunc("/mem/{userId}", updateMemory).Methods("POST")
 	mux.HandleFunc("/status", health)
-	mux.HandleFunc("/{n}", calc)
 
 	n := negroni.Classic() // Includes some default middlewares
 	n.UseHandler(mux)
@@ -36,29 +34,12 @@ func main() {
 	http.ListenAndServe("0.0.0.0:"+sc.Port, n)
 }
 
-func hello(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, sc.HelloMessage)
-}
-
-func calc(w http.ResponseWriter, req *http.Request) {
-	n := mux.Vars(req)["n"]
-	log.Println("BICZ " + req.URL.Query().Get("nocache"))
-	nocache := req.URL.Query().Get("nocache") == "true"
-	in, err := strconv.Atoi(n)
-	if err != nil {
-		r.JSON(w, http.StatusBadRequest, map[string]string{"error": "Cannot parse to int: " + n, "err": err.Error()})
-	}
-	h := store.Get(in)
-	if !nocache && h != nil {
-		store.Hit(in, h.factorial)
-		r.JSON(w, http.StatusOK, map[string]string{"n": n, "factorial": h.factorial, "hits": strconv.FormatInt(h.hits+1, 10)})
-	} else {
-		log.Println(fmt.Sprintf("Not found %s, calculating", n))
-		res := factorial(in)
-		store.Hit(in, res.String())
-		r.JSON(w, http.StatusOK, map[string]string{"n": n, "factorial": res.String(), "hits": "0", "calculated": "true"})
-	}
-
+func updateMemory(w http.ResponseWriter, req *http.Request) {
+	var pu PlayheadUpdate
+	json.NewDecoder(req.Body).Decode(&pu)
+	userId := mux.Vars(req)["userId"]
+	store.Store(userId, pu)
+	r.JSON(w, http.StatusOK, map[string]string{"userId": userId, "mgid": pu.Mgid, "playhead": pu.Playhead})
 }
 
 func initialize() {
@@ -73,7 +54,7 @@ func initialize() {
 	}
 	log.Println(sc)
 
-	store = NewStore(dbc)
+	store = NewPgStore(dbc)
 	r = render.New()
 	if h, err := os.Hostname(); err == nil {
 		hostname = h
@@ -99,4 +80,9 @@ func factorial(n int) *big.Int {
 type ServerConfig struct {
 	Port         string `default:"3000"`
 	HelloMessage string `default:"Hi there"`
+}
+
+type PlayheadUpdate struct {
+	Mgid     string
+	Playhead string
 }

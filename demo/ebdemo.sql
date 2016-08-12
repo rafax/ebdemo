@@ -1,7 +1,7 @@
 CREATE USER "ebdemo" WITH PASSWORD 'omedbe';
 
 CREATE DATABASE "ebdemo"
-  WITH OWNER "ebdemo"
+  WITH OWNER "root"
   ENCODING 'UTF8';
 
 \c ebdemo
